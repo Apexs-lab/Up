@@ -1,0 +1,2 @@
+# No third-party dependencies required.
+# This app uses only Python standard library modules.
