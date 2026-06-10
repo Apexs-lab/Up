@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Up Ledger — local dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0F0F17; --panel:#171724; --panel2:#1D1D2E; --line:#2A2A3E;
+  --text:#EDEDF5; --muted:#8B8BA7; --faint:#5C5C78;
+  --coral:#FF7A64; --coral-dim:rgba(255,122,100,.14);
+  --mint:#3EDCB2; --mint-dim:rgba(62,220,178,.12);
+  --gold:#FFC766;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --display:'Space Grotesk',sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scrollbar-color:var(--line) var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:14px;line-height:1.5;
+  background-image:radial-gradient(ellipse 80% 40% at 50% -10%, rgba(255,122,100,.06), transparent)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input{font:inherit}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px 80px}
+
+/* ---------- masthead ---------- */
+header{display:flex;align-items:center;gap:20px;padding:22px 0 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.wordmark{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.04em;display:flex;align-items:baseline;gap:9px}
+.wordmark .up{color:var(--coral)}
+.wordmark .sep{color:var(--faint);font-weight:500}
+.wordmark .sub{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--muted);letter-spacing:.22em;text-transform:uppercase}
+.range{margin-left:auto;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.range button{padding:7px 14px;font-family:var(--mono);font-size:12px;color:var(--muted);border-right:1px solid var(--line);transition:background .15s,color .15s}
+.range button:last-child{border-right:none}
+.range button:hover{color:var(--text)}
+.range button.on{background:var(--coral-dim);color:var(--coral)}
+.range button:focus-visible,.tok-form button:focus-visible{outline:2px solid var(--coral);outline-offset:-2px}
+
+/* account ticker */
+.ticker{display:flex;gap:10px;padding:14px 0;overflow-x:auto;border-bottom:1px solid var(--line)}
+.acct{flex:0 0 auto;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 14px}
+.acct .dot{width:7px;height:7px;border-radius:50%}
+.acct .nm{font-size:12px;color:var(--muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct .bal{font-family:var(--mono);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.acct.total{border-color:rgba(255,199,102,.35)}
+.acct.total .nm{color:var(--gold)}
+
+/* ---------- hero: cashflow pulse ---------- */
+.hero{padding:36px 0 8px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.net{font-family:var(--mono);font-weight:600;font-size:clamp(40px,6vw,64px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.net.pos{color:var(--mint)} .net.neg{color:var(--coral)}
+.net small{font-size:.42em;color:var(--muted);font-weight:500;margin-left:10px;letter-spacing:0}
+.pulse-box{margin-top:22px;position:relative;height:130px}
+.pulse-legend{display:flex;gap:18px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pulse-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.i-in{background:var(--mint)} .i-out{background:var(--coral)}
+
+/* ---------- stat row ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:30px 0}
+.stat{background:var(--panel);padding:18px 20px}
+.stat .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:8px;font-variant-numeric:tabular-nums}
+.stat .d{font-size:11.5px;color:var(--faint);margin-top:4px}
+.v.in{color:var(--mint)} .v.out{color:var(--coral)} .v.gd{color:var(--gold)}
+
+/* ---------- panels grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;grid-column:span 12}
+.panel h2{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.01em;margin-bottom:4px}
+.panel .hint{font-size:11.5px;color:var(--faint);margin-bottom:16px}
+@media(min-width:900px){
+  .span6{grid-column:span 6}.span7{grid-column:span 7}.span5{grid-column:span 5}
+}
+.chart-h{position:relative;height:260px}
+
+/* category list */
+.catlist{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.catrow{display:grid;grid-template-columns:14px 1fr auto auto;gap:10px;align-items:center;padding:7px 6px;border-radius:7px}
+.catrow:hover{background:var(--panel2)}
+.catrow .swatch{width:9px;height:9px;border-radius:50%}
+.catrow .cn{font-size:13px}
+.catrow .cv{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+.catrow .cp{font-family:var(--mono);font-size:11px;color:var(--muted);width:44px;text-align:right}
+.bar-track{grid-column:2/5;height:3px;background:var(--panel2);border-radius:2px;overflow:hidden;margin:0 6px 4px}
+.bar-fill{height:100%;border-radius:2px}
+
+/* ---------- ledger ---------- */
+.ledger-tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.ledger-tools input,.ledger-tools select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--body)}
+.ledger-tools input{flex:1;min-width:200px}
+.ledger-tools input:focus,.ledger-tools select:focus{outline:1px solid var(--coral);border-color:var(--coral)}
+.toggle{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+table{width:100%;border-collapse:collapse}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-weight:500}
+td{padding:9px 10px;border-bottom:1px solid rgba(42,42,62,.5);font-size:13px;vertical-align:top}
+tr:hover td{background:var(--panel2)}
+td.amt{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.amt.in{color:var(--mint)} td.amt.out{color:var(--text)}
+td .desc{font-weight:500}
+td .raw{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.tf{border-color:rgba(255,199,102,.4);color:var(--gold)}
+.pill.held{border-color:rgba(255,122,100,.4);color:var(--coral)}
+.more{display:block;margin:16px auto 0;font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px 22px}
+.more:hover{color:var(--text);border-color:var(--muted)}
+
+/* ---------- gate / loading / error ---------- */
+.gate{max-width:460px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:34px}
+.gate h1{font-family:var(--display);font-size:22px;margin-bottom:6px}
+.gate h1 .up{color:var(--coral)}
+.gate p{color:var(--muted);font-size:13px;margin-bottom:18px}
+.gate p a{color:var(--coral)}
+.tok-form{display:flex;gap:10px}
+.tok-form input{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px 14px;font-family:var(--mono);font-size:12.5px}
+.tok-form button{background:var(--coral);color:#1A130F;font-weight:600;border-radius:8px;padding:10px 20px}
+.tok-form button:hover{filter:brightness(1.08)}
+.err{margin-top:14px;font-size:12.5px;color:var(--coral)}
+.loading{max-width:460px;margin:16vh auto;text-align:center}
+.loading .lg{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.loading .ct{font-family:var(--mono);font-size:30px;font-weight:600;color:var(--coral);margin-top:14px;font-variant-numeric:tabular-nums}
+.spin{width:34px;height:34px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--coral);margin:0 auto 18px;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.hidden{display:none}
+footer{margin-top:46px;font-family:var(--mono);font-size:11px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:gap;gap:10px}
+</style>
+</head>
+<body>
+
+<!-- token gate -->
+<div id="gate" class="gate hidden">
+  <h1><span class="up">Up</span> Ledger</h1>
+  <p>Paste your Up personal access token to load your data. It is used in memory only and is never saved in browser storage. Get a token at <a href="https://api.up.com.au" target="_blank" rel="noopener">api.up.com.au</a>.</p>
+  <div class="tok-form">
+    <input id="tok" type="password" placeholder="up:yeah:…" autocomplete="off" spellcheck="false">
+    <button id="tokGo">Connect</button>
+  </div>
+  <div id="gateErr" class="err hidden"></div>
+</div>
+
+<!-- loading -->
+<div id="loading" class="loading hidden">
+  <div class="spin" aria-hidden="true"></div>
+  <div class="lg" id="loadMsg">Connecting to Up…</div>
+  <div class="ct" id="loadCount"></div>
+</div>
+
+<!-- dashboard -->
+<div id="app" class="wrap hidden">
+  <header>
+    <div class="wordmark"><span class="up">UP</span><span class="sep">/</span>LEDGER <span class="sub">local · live</span></div>
+    <nav class="range" id="range" aria-label="Date range">
+      <button data-d="30">30D</button>
+      <button data-d="90" class="on">90D</button>
+      <button data-d="180">180D</button>
+      <button data-d="365">1Y</button>
+    </nav>
+  </header>
+
+  <div class="ticker" id="ticker"></div>
+
+  <section class="hero">
+    <div class="eyebrow" id="heroLabel">Net cashflow · last 90 days</div>
+    <div class="net" id="netFig">—</div>
+    <div class="pulse-box"><canvas id="pulse"></canvas></div>
+    <div class="pulse-legend"><span><i class="i-in"></i>money in</span><span><i class="i-out"></i>money out</span><span id="pulseHint" style="margin-left:auto"></span></div>
+  </section>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="grid">
+    <div class="panel span7">
+      <h2>Months, in vs out</h2>
+      <div class="hint">Transfers between your own accounts excluded</div>
+      <div class="chart-h"><canvas id="months"></canvas></div>
+    </div>
+    <div class="panel span5">
+      <h2>Where it went</h2>
+      <div class="hint">Spending by Up category</div>
+      <div class="chart-h" style="height:190px"><canvas id="donut"></canvas></div>
+      <div class="catlist" id="catlist"></div>
+    </div>
+    <div class="panel span6">
+      <h2>Top merchants</h2>
+      <div class="hint">By total spend in range</div>
+      <div class="chart-h"><canvas id="merchants"></canvas></div>
+    </div>
+    <div class="panel span6">
+      <h2>Spending rhythm</h2>
+      <div class="hint">Average spend by day of week</div>
+      <div class="chart-h"><canvas id="weekday"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Ledger</h2>
+      <div class="hint" id="ledgerHint"></div>
+      <div class="ledger-tools">
+        <input id="search" type="search" placeholder="Search description, merchant, message…">
+        <select id="catFilter"><option value="">All categories</option></select>
+        <label class="toggle"><input type="checkbox" id="showTf"> show internal transfers</label>
+      </div>
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      </div>
+      <button class="more hidden" id="more">Show more</button>
+    </div>
+  </section>
+
+  <footer>
+    <span id="footL">—</span>
+    <span>data via Up API · stored nowhere</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ============ state ============ */
+const S = {
+  token: "",
+  envToken: false,
+  days: 90,
+  accounts: [],
+  categories: {},      // id -> {name, parentId}
+  tx: [],              // raw transactions
+  charts: {},
+  ledgerLimit: 50,
+};
+const AUD = new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"});
+const fmt = c => AUD.format(c/100);
+const $ = id => document.getElementById(id);
+const PALETTE = ["#FF7A64","#3EDCB2","#FFC766","#7B8CFF","#FF9ECF","#5AC8FA","#C9A0FF","#9BE36D","#FF8A3D","#6EE7E0","#E36D8F","#A3A3C2"];
+
+Chart.defaults.color = "#8B8BA7";
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 10.5;
+Chart.defaults.borderColor = "rgba(42,42,62,.6)";
+
+/* ============ api ============ */
+async function up(path){
+  const r = await fetch("/up"+path, { headers: S.token ? {"X-Up-Token":S.token} : {} });
+  if(!r.ok){
+    const ct = r.headers.get("content-type") || "";
+    if(!ct.includes("json")){
+      throw new Error(r.status===404
+        ? "the local proxy isn't running — this page must be served by server.py at http://localhost:8765"
+        : r.status+" from local server");
+    }
+    let msg = r.status+" from Up API";
+    try{ const j = await r.json(); msg = (j.errors&&j.errors[0]) ? (j.errors[0].title+(j.errors[0].detail?" — "+j.errors[0].detail:"")) : msg; }catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+async function pageAll(firstPath, onPage){
+  let path = firstPath, out = [], pages = 0;
+  while(path && pages < 60){
+    const j = await up(path);
+    out = out.concat(j.data);
+    pages++;
+    if(onPage) onPage(out.length);
+    path = j.links && j.links.next ? j.links.next.replace("https://api.up.com.au/api/v1","") : null;
+  }
+  return out;
+}
+
+/* ============ boot ============ */
+(async function boot(){
+  // Sanity check: are we actually being served by server.py?
+  try{
+    const r = await fetch("/token-status");
+    if(!r.ok) throw new Error("status "+r.status);
+    const ts = await r.json();
+    S.envToken = ts.hasEnvToken;
+  }catch(e){
+    showGate("Local proxy not found. This page must be served by server.py — run `python3 server.py` in the dashboard folder, then open http://localhost:8765 (don't open the file directly or use another server like Live Server).");
+    return;
+  }
+  if(S.envToken || S.token) start();
+  else showGate();
+})();
+
+function showGate(err){
+  $("gate").classList.remove("hidden");
+  $("loading").classList.add("hidden");
+  $("app").classList.add("hidden");
+  if(err){ $("gateErr").textContent = err; $("gateErr").classList.remove("hidden"); }
+  $("tokGo").onclick = () => {
+    const v = $("tok").value.trim();
+    if(!v) return;
+    S.token = v;
+    start();
+  };
+  $("tok").onkeydown = e => { if(e.key==="Enter") $("tokGo").click(); };
+}
+
+async function start(){
+  $("gate").classList.add("hidden");
+  $("app").classList.add("hidden");
+  $("loading").classList.remove("hidden");
+  $("loadMsg").textContent = "Connecting to Up…";
+  $("loadCount").textContent = "";
+  try{
+    await up("/util/ping");
+  }catch(e){
+    S.token = "";
+    showGate("Couldn't authenticate: "+e.message);
+    return;
+  }
+  try{
+    $("loadMsg").textContent = "Loading accounts & categories…";
+    const [accts, cats] = await Promise.all([ pageAll("/accounts?page[size]=30"), pageAll("/categories") ]);
+    S.accounts = accts;
+    S.categories = {};
+    cats.forEach(c => S.categories[c.id] = {
+      name: c.attributes.name,
+      parentId: c.relationships.parent && c.relationships.parent.data ? c.relationships.parent.data.id : null
+    });
+    await loadTransactions();
+    render();
+  }catch(e){
+    showGate("Something went wrong loading data: "+e.message);
+  }
+}
+
+async function loadTransactions(){
+  $("app").classList.add("hidden");
+  $("loading").classList.remove("hidden");
+  $("loadMsg").textContent = `Pulling ${S.days} days of transactions…`;
+  const since = new Date(Date.now() - S.days*864e5).toISOString();
+  S.tx = await pageAll(`/transactions?page[size]=100&filter[since]=${encodeURIComponent(since)}`,
+    n => $("loadCount").textContent = n + " transactions");
+}
+
+/* ============ classification ============ */
+function isTransfer(t){
+  return !!(t.relationships.transferAccount && t.relationships.transferAccount.data);
+}
+function catName(t){
+  const c = t.relationships.category && t.relationships.category.data;
+  if(!c) return isTransfer(t) ? "Transfers" : "Uncategorised";
+  const node = S.categories[c.id];
+  return node ? node.name : c.id;
+}
+function parentCatName(t){
+  const p = t.relationships.parentCategory && t.relationships.parentCategory.data;
+  if(p && S.categories[p.id]) return S.categories[p.id].name;
+  return catName(t);
+}
+function cents(t){ return parseInt(t.attributes.amount.valueInBaseUnits,10); }
+function when(t){ return new Date(t.attributes.settledAt || t.attributes.createdAt); }
+function dayKey(d){ return d.toISOString().slice(0,10); }
+
+/* ============ aggregate + render ============ */
+function render(){
+  $("loading").classList.add("hidden");
+  $("app").classList.remove("hidden");
+
+  const real = S.tx.filter(t => !isTransfer(t));
+  const spendTx = real.filter(t => cents(t) < 0);
+  const incomeTx = real.filter(t => cents(t) > 0);
+  const spent = -spendTx.reduce((a,t)=>a+cents(t),0);
+  const income = incomeTx.reduce((a,t)=>a+cents(t),0);
+  const net = income - spent;
+
+  /* ticker */
+  const tk = $("ticker"); tk.innerHTML = "";
+  let totalBal = 0;
+  S.accounts.forEach((a,i)=>{
+    const bal = parseInt(a.attributes.balance.valueInBaseUnits,10);
+    totalBal += bal;
+    const el = document.createElement("div");
+    el.className = "acct";
+    const col = a.attributes.accountType === "SAVER" ? "var(--gold)" : "var(--coral)";
+    el.innerHTML = `<span class="dot" style="background:${col}"></span><span class="nm">${esc(a.attributes.displayName)}</span><span class="bal">${fmt(bal)}</span>`;
+    tk.appendChild(el);
+  });
+  const tot = document.createElement("div");
+  tot.className = "acct total";
+  tot.innerHTML = `<span class="dot" style="background:var(--gold)"></span><span class="nm">TOTAL</span><span class="bal">${fmt(totalBal)}</span>`;
+  tk.prepend(tot);
+
+  /* hero */
+  $("heroLabel").textContent = `Net cashflow · last ${S.days} days`;
+  const nf = $("netFig");
+  nf.textContent = (net>=0?"+":"−") + fmt(Math.abs(net)).replace("$","$");
+  nf.innerHTML += `<small>${fmt(income)} in · ${fmt(spent)} out</small>`;
+  nf.className = "net " + (net>=0?"pos":"neg");
+
+  /* daily pulse */
+  const days = {};
+  for(let i=S.days-1;i>=0;i--){ days[dayKey(new Date(Date.now()-i*864e5))] = {in:0,out:0}; }
+  real.forEach(t=>{
+    const k = dayKey(when(t)); if(!days[k]) return;
+    const c = cents(t);
+    if(c<0) days[k].out += -c; else days[k].in += c;
+  });
+  const dk = Object.keys(days);
+  drawPulse(dk, dk.map(k=>days[k].in/100), dk.map(k=>-days[k].out/100));
+  const peakOut = Math.max(...dk.map(k=>days[k].out));
+  const peakDay = dk[dk.map(k=>days[k].out).indexOf(peakOut)];
+  $("pulseHint").textContent = peakOut>0 ? `biggest day ${fmtDate(peakDay)} · ${fmt(peakOut)}` : "";
+
+  /* stats */
+  const roundUps = S.tx.reduce((a,t)=> a + (t.attributes.roundUp ? -parseInt(t.attributes.roundUp.amount.valueInBaseUnits,10) : 0), 0);
+  const saveRate = income>0 ? Math.max(0, net/income*100) : 0;
+  const perDay = spent / S.days;
+  const held = S.tx.filter(t=>t.attributes.status==="HELD").length;
+  $("stats").innerHTML = [
+    st("Money in", fmt(income), "v in", incomeTx.length+" deposits"),
+    st("Money out", fmt(spent), "v out", spendTx.length+" purchases"),
+    st("Avg per day", fmt(Math.round(perDay)), "v", "across "+S.days+" days"),
+    st("Savings rate", saveRate.toFixed(1)+"%", "v "+(saveRate>=20?"in":saveRate>0?"gd":"out"), "of money in, kept"),
+    st("Round-ups", fmt(roundUps), "v gd", "swept to savers"),
+    st("Pending", held, "v", "held transactions"),
+  ].join("");
+
+  /* months chart */
+  const months = {};
+  real.forEach(t=>{
+    const d = when(t); const k = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+    months[k] = months[k] || {in:0,out:0};
+    const c = cents(t); if(c<0) months[k].out += -c; else months[k].in += c;
+  });
+  const mk = Object.keys(months).sort();
+  mkChart("months","bar",{
+    labels: mk.map(k=>new Date(k+"-02").toLocaleDateString("en-AU",{month:"short",year:"2-digit"})),
+    datasets:[
+      {label:"In", data:mk.map(k=>months[k].in/100), backgroundColor:"#3EDCB2", borderRadius:4, maxBarThickness:34},
+      {label:"Out",data:mk.map(k=>months[k].out/100),backgroundColor:"#FF7A64", borderRadius:4, maxBarThickness:34},
+    ]},
+    {plugins:{legend:{display:false},tooltip:tip(v=>AUD.format(v))},
+     scales:{y:{ticks:{callback:v=>"$"+(v>=1000?(v/1000)+"k":v)}},x:{grid:{display:false}}}});
+
+  /* categories */
+  const cats = {};
+  spendTx.forEach(t=>{ const n = parentCatName(t); cats[n]=(cats[n]||0)+(-cents(t)); });
+  const ce = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  const top = ce.slice(0,8); const restSum = ce.slice(8).reduce((a,x)=>a+x[1],0);
+  if(restSum>0) top.push(["Everything else",restSum]);
+  mkChart("donut","doughnut",{
+    labels: top.map(x=>x[0]),
+    datasets:[{data:top.map(x=>x[1]/100), backgroundColor:PALETTE, borderColor:"#171724", borderWidth:3, hoverOffset:6}]},
+    {cutout:"68%",plugins:{legend:{display:false},tooltip:tip(v=>AUD.format(v))}});
+  $("catlist").innerHTML = top.map(([n,v],i)=>`
+    <div class="catrow">
+      <span class="swatch" style="background:${PALETTE[i%PALETTE.length]}"></span>
+      <span class="cn">${esc(n)}</span>
+      <span class="cv">${fmt(v)}</span>
+      <span class="cp">${(v/spent*100).toFixed(1)}%</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(v/top[0][1]*100)}%;background:${PALETTE[i%PALETTE.length]}"></div></div>
+    </div>`).join("");
+
+  /* merchants */
+  const mer = {};
+  spendTx.forEach(t=>{ const n = t.attributes.description; mer[n]=(mer[n]||0)+(-cents(t)); });
+  const me = Object.entries(mer).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart("merchants","bar",{
+    labels: me.map(x=>x[0].length>22?x[0].slice(0,21)+"…":x[0]),
+    datasets:[{data:me.map(x=>x[1]/100), backgroundColor:"rgba(255,122,100,.75)", borderRadius:4, maxBarThickness:16}]},
+    {indexAxis:"y",plugins:{legend:{display:false},tooltip:tip(v=>AUD.format(v))},
+     scales:{x:{ticks:{callback:v=>"$"+v}},y:{grid:{display:false}}}});
+
+  /* weekday rhythm */
+  const wd = Array(7).fill(0), wn = Array(7).fill(0);
+  const seen = new Set();
+  spendTx.forEach(t=>{ const d=when(t); wd[d.getDay()] += -cents(t); seen.add(dayKey(d)+"|"+d.getDay()); });
+  // count occurrences of each weekday in range for a true average
+  for(let i=0;i<S.days;i++){ wn[new Date(Date.now()-i*864e5).getDay()]++; }
+  const order=[1,2,3,4,5,6,0], names=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  mkChart("weekday","bar",{
+    labels: order.map(i=>names[i]),
+    datasets:[{data:order.map(i=>wn[i]?wd[i]/wn[i]/100:0),
+      backgroundColor:order.map(i=>(i===0||i===6)?"rgba(255,199,102,.8)":"rgba(62,220,178,.7)"), borderRadius:4, maxBarThickness:38}]},
+    {plugins:{legend:{display:false},tooltip:tip(v=>AUD.format(v)+" avg")},
+     scales:{y:{ticks:{callback:v=>"$"+v}},x:{grid:{display:false}}}});
+
+  /* ledger */
+  const cf = $("catFilter");
+  cf.innerHTML = '<option value="">All categories</option>' +
+    [...new Set(S.tx.map(catName))].sort().map(c=>`<option>${esc(c)}</option>`).join("");
+  S.ledgerLimit = 50;
+  renderLedger();
+  $("ledgerHint").textContent = `${S.tx.length} transactions in range · ${S.tx.filter(isTransfer).length} internal transfers hidden by default`;
+  $("footL").textContent = `range ${fmtDate(dayKey(new Date(Date.now()-S.days*864e5)))} → today · ${S.accounts.length} accounts`;
+}
+
+function st(k,v,vc,d){ return `<div class="stat"><div class="k">${k}</div><div class="${vc}">${v}</div><div class="d">${d}</div></div>`; }
+
+function renderLedger(){
+  const q = $("search").value.trim().toLowerCase();
+  const cat = $("catFilter").value;
+  const showTf = $("showTf").checked;
+  let list = S.tx.filter(t=>{
+    if(!showTf && isTransfer(t)) return false;
+    if(cat && catName(t)!==cat) return false;
+    if(q){
+      const hay = (t.attributes.description+" "+(t.attributes.rawText||"")+" "+(t.attributes.message||"")).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const slice = list.slice(0, S.ledgerLimit);
+  $("rows").innerHTML = slice.map(t=>{
+    const c = cents(t), d = when(t);
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--muted);font-family:var(--mono);font-size:12px">${d.toLocaleDateString("en-AU",{day:"2-digit",month:"short"})}</td>
+      <td><div class="desc">${esc(t.attributes.description)}</div>${t.attributes.message?`<div class="raw">“${esc(t.attributes.message)}”</div>`:""}</td>
+      <td><span class="pill ${isTransfer(t)?"tf":""}">${esc(catName(t))}</span></td>
+      <td>${t.attributes.status==="HELD"?'<span class="pill held">HELD</span>':'<span class="pill">settled</span>'}</td>
+      <td class="amt ${c>0?"in":"out"}">${c>0?"+":""}${fmt(c)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" style="color:var(--faint);padding:24px;text-align:center">Nothing matches — clear the search or widen the range.</td></tr>`;
+  $("more").classList.toggle("hidden", list.length <= S.ledgerLimit);
+}
+
+/* ============ charts ============ */
+function mkChart(id, type, data, opts){
+  if(S.charts[id]) S.charts[id].destroy();
+  S.charts[id] = new Chart($(id), {type, data, options: Object.assign({
+    responsive:true, maintainAspectRatio:false, animation:{duration:500},
+  }, opts)});
+}
+function drawPulse(labels, inn, out){
+  if(S.charts.pulse) S.charts.pulse.destroy();
+  S.charts.pulse = new Chart($("pulse"),{
+    type:"bar",
+    data:{labels,
+      datasets:[
+        {data:inn, backgroundColor:"#3EDCB2", maxBarThickness:8, borderRadius:2},
+        {data:out, backgroundColor:"#FF7A64", maxBarThickness:8, borderRadius:2},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{
+          title:items=>fmtDate(items[0].label),
+          label:c=> (c.datasetIndex===0?"in  ":"out ") + AUD.format(Math.abs(c.parsed.y)),
+        }, backgroundColor:"#1D1D2E", borderColor:"#2A2A3E", borderWidth:1, titleFont:{family:"'IBM Plex Mono'"}, bodyFont:{family:"'IBM Plex Mono'"}}},
+      scales:{
+        x:{stacked:true, display:false},
+        y:{stacked:true, grid:{color:ctx=>ctx.tick.value===0?"rgba(139,139,167,.5)":"rgba(42,42,62,.35)"},
+           ticks:{callback:v=>"$"+Math.abs(v), maxTicksLimit:5}},
+      }}});
+}
+function tip(fmtV){
+  return {callbacks:{label:c=>fmtV(Math.abs(c.parsed.y ?? c.parsed.x ?? c.parsed))},
+    backgroundColor:"#1D1D2E", borderColor:"#2A2A3E", borderWidth:1,
+    titleFont:{family:"'IBM Plex Mono'"}, bodyFont:{family:"'IBM Plex Mono'"}};
+}
+
+/* ============ utils + events ============ */
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function fmtDate(k){ return new Date(k).toLocaleDateString("en-AU",{day:"numeric",month:"short"}); }
+
+$("range").addEventListener("click", async e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  document.querySelectorAll(".range button").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  S.days = parseInt(b.dataset.d,10);
+  await loadTransactions();
+  render();
+});
+$("search").addEventListener("input", ()=>{S.ledgerLimit=50; renderLedger();});
+$("catFilter").addEventListener("change", ()=>{S.ledgerLimit=50; renderLedger();});
+$("showTf").addEventListener("change", renderLedger);
+$("more").addEventListener("click", ()=>{S.ledgerLimit+=50; renderLedger();});
+</script>
+</body>
+</html>
